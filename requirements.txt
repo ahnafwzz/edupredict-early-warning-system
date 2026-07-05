@@ -1,0 +1,11 @@
+pandas
+numpy
+scikit-learn
+streamlit
+gradio
+matplotlib
+seaborn
+fastapi>=0.100.0
+uvicorn[standard]>=0.29.0
+requests>=2.31.0
+pydantic>=2.0.0
