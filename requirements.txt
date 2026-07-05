@@ -1,10 +1,12 @@
 pandas
 numpy
 scikit-learn
+joblib
 streamlit
 gradio
 matplotlib
 seaborn
+plotly
 fastapi>=0.100.0
 uvicorn[standard]>=0.29.0
 requests>=2.31.0
