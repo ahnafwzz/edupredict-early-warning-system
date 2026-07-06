@@ -13,8 +13,14 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
+import requests
 
 sys.path.insert(0, os.path.abspath("src"))
+
+# URL FastAPI backend 
+API_BASE_URL = os.getenv("EDUPREDICT_API_URL", "http://localhost:8000")
+API_TIMEOUT  = 10 
+
 
 # =============================================================================
 # KONFIGURASI HALAMAN
@@ -207,6 +213,34 @@ def load_report_data():
     except: audit_data = {}
     return df_results, clf_reports, audit_data
 
+def call_predict_api(payload: dict) -> dict:
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/predict",
+            json=payload,
+            timeout=API_TIMEOUT,
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.ConnectionError:
+        raise RuntimeError("Tidak dapat terhubung ke API server. Pastikan FastAPI berjalan di port 8000.")
+    except requests.exceptions.Timeout:
+        raise RuntimeError("Request ke API timeout setelah 10 detik.")
+    except requests.exceptions.HTTPError as e:
+        detail = e.response.json().get("detail", str(e))
+        raise RuntimeError(f"API mengembalikan error: {detail}")
+
+def get_api_status() -> dict:
+    try:
+        r = requests.get(f"{API_BASE_URL}/health", timeout=3)
+        return r.json()
+    except Exception:
+        return None
+
+@st.cache_data(ttl=30)
+def _cached_api_status():
+    return get_api_status()
+
 model, scaler, feature_columns, model_name, load_error = load_ml_models()
 df_reports, classification_reports, dataset_audit = load_report_data()
 
@@ -293,7 +327,6 @@ with st.sidebar:
     <hr>
     """, unsafe_allow_html=True)
 
-    # key="nav_radio" → halaman tidak reset saat st.rerun()
     menu_selection = st.radio(
         "Navigasi",
         ["Dashboard", "Analitik Model", "Prediksi"],
@@ -302,19 +335,24 @@ with st.sidebar:
     )
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # Penentuan status berdasarkan ketersediaan model lokal (.joblib)
-    if model:
+    api_status = _cached_api_status()
+
+    if api_status and api_status.get("model_loaded"):
         dot        = "●"
         status_clr = "#16a34a"
         status_bg  = "#f0fdf4"
-        status_txt = f"Sistem Online · {model_name}"
+        status_txt = f"API Online · {api_status.get('model_name', 'Model')}"
+    elif api_status:
+        dot        = "●"
+        status_clr = "#d97706"
+        status_bg  = "#fffbeb"
+        status_txt = "API Online · Model tidak termuat"
     else:
         dot        = "○"
         status_clr = "#dc2626"
         status_bg  = "#fff1f2"
-        status_txt = "Sistem Offline"
+        status_txt = "API Offline"
 
-    # Render UI indikator status
     st.markdown(f"""
     <div style='margin-top:12px; font-size:0.73rem; text-align:center; color:{status_clr};
          padding:6px; border-radius:6px; background:{status_bg};
@@ -569,66 +607,45 @@ elif menu_selection == "Prediksi":
     # PROSES INFERENCE
     # =========================================================================
     if btn_submit:
-        # Kalkulasi otomatis SKS lulus dari SKS diambil dan IPS
-        rasio_lulus_1 = 1.0 if s1_ips >= 2.50 else (s1_ips / 2.50)
-        rasio_lulus_2 = 1.0 if s2_ips >= 2.50 else (s2_ips / 2.50)
-        s1_sks_lulus  = int(s1_sks_ambil * rasio_lulus_1)
-        s2_sks_lulus  = int(s2_sks_ambil * rasio_lulus_2)
-
-        data_prediksi = {
-            "Curricular units 1st sem (enrolled)":    convert_sks_to_uci(s1_sks_ambil),
-            "Curricular units 1st sem (approved)":    convert_sks_to_uci(s1_sks_lulus),
-            "Curricular units 1st sem (evaluations)": convert_sks_to_uci(s1_sks_ambil),
-            "Curricular units 1st sem (grade)":       convert_ips_to_uci(s1_ips),
-            "Curricular units 2nd sem (enrolled)":    convert_sks_to_uci(s2_sks_ambil),
-            "Curricular units 2nd sem (approved)":    convert_sks_to_uci(s2_sks_lulus),
-            "Curricular units 2nd sem (evaluations)": convert_sks_to_uci(s2_sks_ambil),
-            "Curricular units 2nd sem (grade)":       convert_ips_to_uci(s2_ips),
-            "Admission grade":                        127.3,
-            "Previous qualification (grade)":         133.1,
-            "Previous qualification":                 MAP_PENDIDIKAN.get(s1_prev_qual, 1),
-            "Age at enrollment":                      usia,
-            "Gender":                                 1 if gender == "Laki-laki" else 0,
-            "Marital status":                         {"Lajang": 1, "Menikah": 2, "Janda/Duda": 3, "Cerai": 4}.get(status_nikah, 1),
-            "Daytime/evening attendance\t":           1 if "Reguler" in waktu_kuliah else 0,
-            "Educational special needs":              1 if kebutuhan == "Ada" else 0,
-            "Tuition fees up to date":                0 if "Menunggak" in ukt_lunas else 1,
-            "Scholarship holder":                     1 if "Penerima" in beasiswa else 0,
-            "Debtor":                                 1 if "Ada" in tunggakan else 0,
-            "Mother's qualification":                 MAP_PENDIDIKAN_ORTU.get(pend_ibu, 36),
-            "Father's qualification":                 MAP_PENDIDIKAN_ORTU.get(pend_ayah, 36),
-            "Mother's occupation":                    MAP_PEKERJAAN.get(kerja_ibu, 99),
-            "Father's occupation":                    MAP_PEKERJAAN.get(kerja_ayah, 99),
+    # Susun payload sesuai schema StudentRequest FastAPI
+        api_payload = {
+            "s1_sks_ambil": s1_sks_ambil,
+            "s1_ips":        s1_ips,
+            "s1_prev_qual":  s1_prev_qual,
+            "s2_sks_ambil":  s2_sks_ambil,
+            "s2_ips":        s2_ips,
+            "usia":          usia,
+            "gender":        gender,
+            "status_nikah":  status_nikah,
+            "waktu_kuliah":  waktu_kuliah,
+            "kebutuhan":     kebutuhan,
+            "ukt_lunas":     ukt_lunas,
+            "beasiswa":      beasiswa,
+            "tunggakan":     tunggakan,
+            "pend_ibu":      pend_ibu,
+            "kerja_ibu":     kerja_ibu,
+            "pend_ayah":     pend_ayah,
+            "kerja_ayah":    kerja_ayah,
         }
-        data_prediksi.update(BASELINE_FEATURES)
 
-        # Susun DataFrame sesuai urutan feature_columns saat training
-        df_input    = pd.DataFrame([data_prediksi], columns=feature_columns).fillna(0.0)
-        data_skala  = scaler.transform(df_input)
-        hasil_prediksi = model.predict(data_skala)[0]
-
-        # Ekstraksi probabilitas
-        try:
-            array_prob   = model.predict_proba(data_skala)[0]
-            daftar_kelas = list(model.classes_)
-            # Model dilatih dengan label biner 0/1
-            if 1 in daftar_kelas:
-                indeks_target = daftar_kelas.index(1)
-            else:
-                indeks_target = -1
-            prob_lulus   = float(array_prob[indeks_target]) * 100
-            prob_risiko  = 100.0 - prob_lulus
-            ada_probabilitas = True
-        except AttributeError:
+        with st.spinner("Mengirim data ke API dan memproses prediksi..."):
             try:
-                skor_jarak = model.decision_function(data_skala)[0]
-                if hasattr(skor_jarak, "__len__"): skor_jarak = skor_jarak[0]
-                prob_lulus  = float(1 / (1 + np.exp(-skor_jarak))) * 100
-                prob_risiko = 100.0 - prob_lulus
-            except Exception:
-                prob_lulus  = 100.0 if hasil_prediksi == 1 else 0.0
-                prob_risiko = 100.0 - prob_lulus
-            ada_probabilitas = False
+                result     = call_predict_api(api_payload)
+                prediction = result["prediction"]        # 0 atau 1
+                prob_lulus = result["metrics"]["probability_graduate_pct"]
+                prob_risiko= result["metrics"]["probability_risk_pct"]
+                model_used = result.get("model_used", model_name or "ML")
+                ada_proba  = True
+            except RuntimeError as e:
+                st.error(f"**Prediksi gagal:** {e}", icon="❌")
+                st.info("Jalankan FastAPI terlebih dahulu: `uvicorn api_fastapi:app --port 8000`")
+                st.stop()
+
+        # Perhitungan SKS lulus untuk kebutuhan tampilan ringkasan
+        rasio_1     = 1.0 if s1_ips >= 2.50 else (s1_ips / 2.50)
+        rasio_2     = 1.0 if s2_ips >= 2.50 else (s2_ips / 2.50)
+        s1_sks_lulus = int(s1_sks_ambil * rasio_1)
+        s2_sks_lulus = int(s2_sks_ambil * rasio_2)
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("<div class='section-title'>Hasil Prediksi</div>", unsafe_allow_html=True)
@@ -642,82 +659,79 @@ elif menu_selection == "Prediksi":
                 number={"suffix": "%", "font": {"size": 36, "color": "#111827", "family": "Inter"}},
                 domain={"x": [0, 1], "y": [0, 1]},
                 gauge={
-                    "axis":   {"range": [0, 100], "tickwidth": 1, "tickcolor": "#9ca3af"},
-                    "bar":    {"color": warna, "thickness": 0.25},
+                    "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": "#e5e7eb",
+                            "tickvals": [0, 20, 40, 60, 80, 100]},
+                    "bar":  {"color": warna, "thickness": 0.25},
                     "bgcolor": "#f0f2f6", "borderwidth": 0,
-                    "steps": [
-                        {"range": [0,  49.9], "color": "#fecaca"},  # merah lebih pekat
-                        {"range": [50, 100],  "color": "#bbf7d0"},  # hijau lebih pekat
-                    ],
+                    "steps": [{"range": [0, 49.9],  "color": "#fecaca"},
+                            {"range": [50, 100], "color": "#bbf7d0"}],
                     "threshold": {"line": {"color": warna, "width": 3},
-                                  "thickness": 0.75, "value": prob_lulus},
+                                "thickness": 0.75, "value": prob_lulus},
                 },
             ))
             fig_g.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)",
                 font={"color": "#111827", "family": "Inter"},
-                height=220,
-                margin=dict(l=30, r=40, t=20, b=10),
+                height=220, margin=dict(l=30, r=40, t=20, b=10),
             )
             st.plotly_chart(fig_g, use_container_width=True)
-            teks_label = "Probabilitas Klasifikasi Lulus" if ada_probabilitas else "Estimasi Perhitungan Sistem"
-            st.markdown(f"<div style='text-align:center; font-size:0.75rem; color:#4b5563; margin-top:-10px;'>{teks_label}</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='text-align:center; font-size:0.75rem; color:#4b5563; margin-top:-10px;'>"
+                f"Probabilitas via {model_used} · FastAPI Backend</div>",
+                unsafe_allow_html=True,
+            )
 
         with col_teks:
             rata_rata_ips     = (s1_ips + s2_ips) / 2
             total_sks_diambil = s1_sks_ambil + s2_sks_ambil
             total_sks_gagal   = (s1_sks_ambil - s1_sks_lulus) + (s2_sks_ambil - s2_sks_lulus)
 
-            if total_sks_gagal > 0:
-                analisis_sks = f"<li>Terdeteksi sebanyak {total_sks_gagal} SKS tidak berhasil diluluskan. Akumulasi ini berisiko menciptakan hambatan laju studi.</li>"
-            else:
-                analisis_sks = f"<li>Seluruh {total_sks_diambil} SKS yang direncanakan berhasil diselesaikan secara penuh tanpa beban mata kuliah mengulang.</li>"
-
-            if rata_rata_ips >= 3.25:
-                analisis_ips = f"<li>Indeks Prestasi Semester berada pada kategori tinggi dengan rata-rata {rata_rata_ips:.2f}, mendukung kestabilan akademik.</li>"
-            elif rata_rata_ips >= 2.50:
-                analisis_ips = f"<li>Capaian IPS rata-rata tercatat sebesar {rata_rata_ips:.2f}. Berada pada ambang batas wajar, disarankan evaluasi berkala.</li>"
-            else:
-                analisis_ips = f"<li>Nilai rata-rata IPS berada di bawah batas optimal ({rata_rata_ips:.2f}), mengindikasikan kerentanan akademik.</li>"
-
-            if "Menunggak" in ukt_lunas or tunggakan == "Ada Tunggakan":
-                analisis_finansial = "<li>Status administrasi keuangan mencatat adanya kendala tunggakan, yang secara statistik berpotensi menjadi faktor penekan penyelesaian studi.</li>"
-            else:
-                analisis_finansial = "<li>Rekam jejak pembayaran UKT dan kewajiban finansial sepenuhnya tertib dan lancar.</li>"
-
-            analisis_disclaimer = (
-                "<li>⚠ <i>Prediksi mempertimbangkan seluruh atribut profil mahasiswa, bukan hanya nilai IPS. "
+            analisis_ips = (
+                f"<li>IPS rata-rata {rata_rata_ips:.2f} kategori {'tinggi, mendukung kestabilan akademik' if rata_rata_ips >= 3.25 else 'wajar, disarankan evaluasi berkala' if rata_rata_ips >= 2.50 else 'di bawah optimal, mengindikasikan kerentanan akademik'}.</li>"
+            )
+            analisis_sks = (
+                f"<li>Seluruh {total_sks_diambil} SKS berhasil diselesaikan tanpa beban mengulang.</li>"
+                if total_sks_gagal == 0 else
+                f"<li>Terdeteksi {total_sks_gagal} SKS tidak lulus berisiko menghambat laju studi.</li>"
+            )
+            analisis_finansial = (
+                "<li>Status UKT dan kewajiban finansial tertib dan lancar.</li>"
+                if "Menunggak" not in ukt_lunas and tunggakan != "Ada Tunggakan" else
+                "<li>Terdeteksi kendala tunggakan berpotensi menjadi faktor penghambat studi.</li>"
+            )
+            disclaimer = (
+                "<li>⚠ <i>Prediksi mempertimbangkan seluruh atribut profil mahasiswa. "
                 "Keputusan klasifikasi murni berasal dari pola dataset pelatihan.</i></li>"
             )
 
-            # Interpretasi hasil prediksi sebagai kelas biner (0 = Risiko, 1 = Lulus)
-            if hasil_prediksi == 1:
+            if prediction == 1:
                 st.markdown(f"""
                 <div class='result-success'>
-                  <div style='font-size:1.4rem; font-weight:700; color:#16a34a;'>Lulus Tepat Waktu</div>
-                  <div style='font-size:0.8rem; color:#4b5563; margin:4px 0 14px;'>
+                <div style='font-size:1.4rem; font-weight:700; color:#16a34a;'>Lulus Tepat Waktu</div>
+                <div style='font-size:0.8rem; color:#4b5563; margin:4px 0 14px;'>
                     Tingkat Keyakinan Model: <b style='color:#16a34a;'>{prob_lulus:.1f}%</b></div>
-                  <div style='font-size:0.86rem; color:#111827; line-height:1.65;'>
+                <div style='font-size:0.86rem; color:#111827; line-height:1.65;'>
                     <b>Insight Profil Analisis:</b>
                     <ul style='margin-top:6px; padding-left:20px; color:#4b5563;'>
-                        {analisis_ips}{analisis_sks}{analisis_finansial}{analisis_disclaimer}
+                        {analisis_ips}{analisis_sks}{analisis_finansial}{disclaimer}
                     </ul>
-                  </div>
+                </div>
                 </div>""", unsafe_allow_html=True)
             else:
                 st.markdown(f"""
                 <div class='result-danger'>
-                  <div style='font-size:1.4rem; font-weight:700; color:#dc2626;'>Berisiko Keterlambatan Studi</div>
-                  <div style='font-size:0.8rem; color:#4b5563; margin:4px 0 14px;'>
+                <div style='font-size:1.4rem; font-weight:700; color:#dc2626;'>Berisiko Keterlambatan Studi</div>
+                <div style='font-size:0.8rem; color:#4b5563; margin:4px 0 14px;'>
                     Tingkat Keyakinan Model: <b style='color:#dc2626;'>{prob_risiko:.1f}%</b></div>
-                  <div style='font-size:0.86rem; color:#111827; line-height:1.65;'>
+                <div style='font-size:0.86rem; color:#111827; line-height:1.65;'>
                     <b>Insight Profil Analisis:</b>
                     <ul style='margin-top:6px; padding-left:20px; color:#4b5563;'>
-                        {analisis_ips}{analisis_sks}{analisis_finansial}{analisis_disclaimer}
+                        {analisis_ips}{analisis_sks}{analisis_finansial}{disclaimer}
                     </ul>
-                  </div>
+                </div>
                 </div>""", unsafe_allow_html=True)
 
+        # ── Ringkasan input & catatan ─────────────────────────────────────────
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("<div style='font-size:0.72rem; color:#4b5563; font-weight:700; margin-bottom:8px;'>RINGKASAN INPUT DATA</div>", unsafe_allow_html=True)
         kv = {
@@ -731,14 +745,18 @@ elif menu_selection == "Prediksi":
         cols_kv = st.columns(3)
         for i, (k, v) in enumerate(kv.items()):
             with cols_kv[i % 3]:
-                st.markdown(f"<div class='kvbox'><div class='kvlbl'>{k}</div><div class='kvval'>{v}</div></div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div class='kvbox'><div class='kvlbl'>{k}</div>"
+                    f"<div class='kvval'>{v}</div></div>",
+                    unsafe_allow_html=True,
+                )
 
         st.markdown("""
         <div class='note'>
-          <b>Catatan Integritas Sistem:</b> Hasil prediksi murni diekstrak dari probabilitas algoritma
-          Machine Learning (<code>predict_proba</code>) tanpa manipulasi pakar.
-          Variabel makroekonomi dan riwayat pendaftaran menggunakan parameter <i>baseline dataset</i>
-          (GDP 0.32, Inflasi 1.4) untuk menjaga konsistensi ruang dimensi model.
-          Prediksi bersifat <em>decision support</em> dan tidak boleh dijadikan keputusan akademik tunggal.
+        <b>Catatan Integritas Sistem:</b> Prediksi diproses oleh FastAPI backend menggunakan
+        <code>predict_proba</code> model Machine Learning tanpa manipulasi pakar.
+        Variabel makroekonomi menggunakan parameter <i>baseline dataset</i> untuk menjaga
+        konsistensi ruang dimensi model. Bersifat <em>decision support</em> 
+        bukan keputusan akademik final.
         </div>
         """, unsafe_allow_html=True)

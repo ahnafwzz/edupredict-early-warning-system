@@ -29,7 +29,7 @@ RANDOM_STATE = 42
 #   tuple (min, max, dtype)  → nilai kontinu/integer acak dalam rentang
 #   list                     → pilih acak dari opsi yang ada (nilai kategorikal)
 #
-# Catatan: 'Daytime/evening attendance\t' memiliki tab literal pada nama kolom —
+# Catatan: 'Daytime/evening attendance\t' memiliki tab literal pada nama kolom -
 # ini artefak dari CSV asli dan harus dijaga konsisten.
 
 FEATURE_META = {
@@ -99,8 +99,8 @@ def generate_single_sample(feature_columns: list, seed: int = None) -> dict:
 
     Parameters
     ----------
-    feature_columns : list[str]  — urutan fitur dari feature_columns.joblib
-    seed            : int        — untuk reproducibility; None = acak penuh
+    feature_columns : list[str]  - urutan fitur dari feature_columns.joblib
+    seed            : int        - untuk reproducibility; None = acak penuh
 
     Returns
     -------
@@ -122,9 +122,9 @@ def generate_batch(
     Parameters
     ----------
     n_samples       : int
-    feature_columns : list[str] — jika None, dimuat dari models/feature_columns.joblib
-    models_dir      : str       — path ke folder models/ (dipakai jika feature_columns=None)
-    seed            : int       — seed utama; tiap baris mendapat sub-seed unik
+    feature_columns : list[str] - jika None, dimuat dari models/feature_columns.joblib
+    models_dir      : str       - path ke folder models/ (dipakai jika feature_columns=None)
+    seed            : int       - seed utama; tiap baris mendapat sub-seed unik
 
     Returns
     -------

@@ -33,8 +33,8 @@ def load_artifacts(models_dir: str = MODELS_DIR) -> tuple:
     -------
     model          : fitted sklearn estimator (Pipeline: SelectKBest + clf)
     scaler         : fitted StandardScaler
-    feature_columns: list[str]   — urutan fitur yang harus ada di input
-    model_name     : str         — nama model terbaik
+    feature_columns: list[str]   - urutan fitur yang harus ada di input
+    model_name     : str         - nama model terbaik
     """
     model           = joblib.load(os.path.join(models_dir, 'best_student_graduation_model.joblib'))
     scaler          = joblib.load(os.path.join(models_dir, 'scaler.joblib'))
@@ -81,9 +81,9 @@ def predict(
     Returns
     -------
     dict dengan:
-        prediction  : int  — 0 atau 1
-        label       : str  — 'Tidak Lulus Tepat Waktu' / 'Lulus Tepat Waktu'
-        proba       : dict — {'Tidak Lulus Tepat Waktu': float, 'Lulus Tepat Waktu': float}
+        prediction  : int  - 0 atau 1
+        label       : str  - 'Tidak Lulus Tepat Waktu' / 'Lulus Tepat Waktu'
+        proba       : dict - {'Tidak Lulus Tepat Waktu': float, 'Lulus Tepat Waktu': float}
                              (hanya jika model mendukung predict_proba, mis. KNN)
     Jika input adalah DataFrame multi-baris, kembalikan list of dict.
     """

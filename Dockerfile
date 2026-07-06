@@ -57,7 +57,7 @@ CMD ["sh", "-c", "\
         --port 8000 \
         --workers 2 \
         --log-level info & \
-    streamlit run app_streamlit.py \
+    streamlit run app_streamlit_api.py \
         --server.port 8501 \
         --server.address 0.0.0.0 \
         --server.headless true \

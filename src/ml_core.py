@@ -89,8 +89,8 @@ def preprocess(df: pd.DataFrame):
 
     Returns
     -------
-    X : pd.DataFrame — fitur prediktor
-    y : pd.Series    — target biner
+    X : pd.DataFrame - fitur prediktor
+    y : pd.Series    - target biner
     feature_columns : list[str]
     """
     df = df.drop_duplicates().copy()
@@ -166,9 +166,9 @@ def train_baseline(models: dict, X_train_scaled, y_train, X_test_scaled, y_test)
 
     Returns
     -------
-    df_baseline : pd.DataFrame — hasil metrik semua model baseline
-    preds       : dict         — prediksi tiap model pada test set
-    trained     : dict         — model yang sudah difit (untuk disimpan)
+    df_baseline : pd.DataFrame - hasil metrik semua model baseline
+    preds       : dict         - prediksi tiap model pada test set
+    trained     : dict         - model yang sudah difit (untuk disimpan)
     """
     results  = []
     preds    = {}
@@ -259,10 +259,10 @@ def run_optimization(
 
     Returns
     -------
-    df_optimized : pd.DataFrame — metrik test set + CV score tiap model
-    preds        : dict         — prediksi optimized tiap model
-    best_models  : dict         — estimator terbaik tiap model
-    best_params  : dict         — parameter terbaik tiap model
+    df_optimized : pd.DataFrame - metrik test set + CV score tiap model
+    preds        : dict         - prediksi optimized tiap model
+    best_models  : dict         - estimator terbaik tiap model
+    best_params  : dict         - parameter terbaik tiap model
     """
     cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_STATE)
 
@@ -328,7 +328,7 @@ def build_classification_reports(preds_dict: dict, y_test) -> dict:
 
     Returns
     -------
-    dict[str, dict] — siap di-dump ke JSON
+    dict[str, dict] - siap di-dump ke JSON
     """
     reports = {}
     for name, y_pred in preds_dict.items():

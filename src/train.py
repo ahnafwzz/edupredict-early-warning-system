@@ -91,7 +91,7 @@ def main():
 
     print(f"\n  Train set : {X_train.shape[0]} baris")
     print(f"  Test set  : {X_test.shape[0]} baris")
-    print(f"  Proporsi positif — train: {y_train.mean():.2%} | test: {y_test.mean():.2%}")
+    print(f"  Proporsi positif - train: {y_train.mean():.2%} | test: {y_test.mean():.2%}")
 
     # ─── 3. Baseline ─────────────────────────────────────────────────────
     _banner(3, 6, "Baseline KNN / Naive Bayes / SVM")
