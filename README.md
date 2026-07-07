@@ -294,13 +294,13 @@ uas-ml-kelulusan-A11.2024.15835-Ahnaf_Fawwaz/
 ├── report/
 │   └── laporan_uas_ml_kelulusan.pdf         # Dokumen laporan akademik kelengkapan evaluasi penelitian
 │
-├── README.md                       # Dokumentasi instruksional utama repositori ini 
-├── app_streamlit.py                # Aplikasi UI/UX utama (Mode Monolitik)
-├── app_streamlit_api.py            # Aplikasi UI/UX yang terintegrasi API (Mode Microservices)
-├── api_fastapi.py                  # REST API backend
-├── Dockerfile                      # Container konfigurasi untuk deployment
-├── requirements.txt                # Daftar library Python (dependencies) yang dibutuhkan proyek
-└── Optimization of Machine Learning Model using Grid and Random Search Algorithms for Predicting Student Dropout.pdf                         # Paper utama referensi penelitian
+├── README.md                                # Dokumentasi instruksional utama repositori ini 
+├── app_streamlit.py                         # Aplikasi UI/UX utama (Mode Monolitik)
+├── app_streamlit_api.py                     # Aplikasi UI/UX yang terintegrasi API (Mode Microservices)
+├── api_fastapi.py                           # REST API backend
+├── Dockerfile                               # Container konfigurasi untuk deployment
+├── requirements.txt                         # Daftar library Python (dependencies) yang dibutuhkan proyek
+└── paper_al_hakim_2026.pdf                  # Paper utama referensi penelitian
 ```
 
 ---
